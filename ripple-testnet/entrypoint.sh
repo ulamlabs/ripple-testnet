@@ -7,14 +7,18 @@ sed -i "s|RIPPLE_VALIDATOR_TOKEN|${RIPPLE_VALIDATOR_TOKEN:-$DEFAULT_VALIDATOR_TO
 sed -i "s|RIPPLE_NETWORK_ID|${RIPPLE_NETWORK_ID:-$DEFAULT_NETWORK_ID}|g" /opt/ripple/etc/rippled.cfg
 sed -i "s|RIPPLE_VALIDATOR_PUBKEY|${RIPPLE_VALIDATOR_PUBKEY:-$DEFAULT_VALIDATOR_PUBKEY}|g" /opt/ripple/etc/validators.txt
 
-/opt/ripple/bin/rippled --quorum 1 --load --valid "$@"
-# this should hopefully give enough time for k8s to kill the pod before running
-# next command
-sleep 1m
+# If db exists, attempt to restore it
+if find /var/lib/rippled/db -mindepth 1 | read; then
+    /opt/ripple/bin/rippled --quorum 1 --load --valid "$@"
+    # this should hopefully give enough time for k8s to kill the pod before running
+    # next command
+    sleep 1m
 
-# rippled always returns error code 0, even if it crashes because it's database
-# is corrupted or doesn't exist, which means that we have to assume that it
-# crashed if it reached this point in the script
-echo "clean db, fallback to new ledger"
-rm -rf /var/lib/rippled/db/*
+    # rippled always returns error code 0, even if it crashes because it's database
+    # is corrupted or doesn't exist, which means that we have to assume that it
+    # crashed if it reached this point in the script
+    echo "clean db, fallback to new ledger"
+    rm -rf /var/lib/rippled/db/*
+fi
+
 /opt/ripple/bin/rippled --quorum 1 --start --valid "$@"
